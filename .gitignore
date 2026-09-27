@@ -1,0 +1,4 @@
+/build/
+/root/
+/include/sys/syscall.h
+/.clangd
