@@ -3,10 +3,16 @@ AS					= as
 AR					= ar
 LD					= ld
 
-ROOT				= ${.PARSEDIR}
+ROOT				= ${.CURDIR}
+
+.if empty(ROOT) || ${ROOT} == "/"
+.error ROOT resolved to "${ROOT}" -- refusing to continue
+.endif
+
 INCDIR				= ${ROOT}/include
 BUILDDIR			= ${ROOT}/build
-ROOTDIR				= ${ROOT}/root
+ROOTFSDIR			= ${ROOT}/rootfs
+ROOTDIRS			= ${ROOTDIR}/dev ${ROOTDIR}/etc ${ROOTDIR}/tmp ${ROOTDIR}/boot ${ROOTDIR}/bin ${ROOTDIR}/sbin ${ROOTDIR}/lib ${ROOTDIR}/usr
 
 CFLAGS				= -ffreestanding -fno-stack-protector -nostdinc -Wall -Wextra -O1 -I${INCDIR}
 LDFLAGS				= -nostdlib -static -e _start
@@ -25,7 +31,10 @@ LIBC_A				= ${BUILDDIR}/libc.a
 INIT_SRCS			!= find ${ROOT}/src/init -name '*.c'
 INIT_OBJS			= ${INIT_SRCS:S,${ROOT}/src/init,${BUILDDIR}/init,g:S,.c,.o,}
 
-.PHONY: all clean kernel installkernel syscalls libc init
+IMG					= ${BUILDDIR}/rkos.img
+IMG_SIZE			= 512m
+
+.PHONY: all clean kernel installkernel syscalls libc init rootfs-skel rootfs image
 
 all: syscalls libc kernel init
 
@@ -74,7 +83,18 @@ ${ROOTDIR}/sbin/init: ${CRT0_OBJ} ${INIT_OBJS} ${LIBC_A}
 
 init: ${ROOTDIR}/sbin/init
 
+rootfs-skel:
+	mkdir -p ${ROOTFS_DIRS}
+
+${ROOTDIR}/etc/fstab: rootfs-skel
+	echo '/dev/vtbd0  /  ufs  rw  1  1' > ${.TARGET}
+
+rootfs: rootfs-skel ${ROOTDIR}/etc/fstab init
+
+image: rootfs installkernel
+	makefs -t ffs -o density=8192 -s ${IMG_SIZE} ${IMG} ${ROOTDIR}
+
 clean:
 	rm -rf ${BUILDDIR}
-	rm -f ${ROOTDIR}
+	rm -rf ${ROOTFSDIR}
 	rm -f ${ROOT}/include/sys/syscall.h
